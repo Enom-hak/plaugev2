@@ -50,7 +50,7 @@ async def ping_target(target: str):
             os.system("clear")
             output = subprocess.check_output(["ping", "-c", "1", target], stderr=subprocess.STDOUT, universal_newlines=True)
             print(f"{bcolors.OKBLUE}Ping successful: {output.split()[3]} ms{bcolors.ENDC}")
-            load = timer × 100
+            load = timer*100
             cal = duration_minutes - load
             print(f"{cal}")
         except subprocess.CalledProcessError:
