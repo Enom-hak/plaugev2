@@ -47,11 +47,15 @@ class CustomTCPProtocol(asyncio.Protocol):
 async def ping_target(target: str):
     while True:
         try:
+            os.system("clear")
             output = subprocess.check_output(["ping", "-c", "1", target], stderr=subprocess.STDOUT, universal_newlines=True)
             print(f"{bcolors.OKBLUE}Ping successful: {output.split()[3]} ms{bcolors.ENDC}")
+            load = timer × 100
+            cal = duration_minutes - load
+            print(f"{cal}")
         except subprocess.CalledProcessError:
             print(f"{bcolors.FAIL}Ping failed. Target is not reachable.{bcolors.ENDC}")
-        await asyncio.sleep(5)
+        await asyncio.sleep(1)
 
 async def attack(target: str, duration_minutes: int, attack_count: int) -> None:
     status = {}
